@@ -379,6 +379,34 @@ app.get('/performance/:userId', async (req, res) => {
     }
 });
 
+// Add this new route to your backend/index.js file
+
+// --- NEW: Delete a Study Plan ---
+
+// 14. Delete a study plan and its related assessments
+app.delete('/study-plan/:planId', async (req, res) => {
+    const { planId } = req.params;
+    try {
+        // Prisma's transactional API ensures both operations succeed or neither do.
+        await prisma.$transaction(async (tx) => {
+            // Step 1: Delete all assessments related to the plan
+            await tx.assessment.deleteMany({
+                where: { studyPlanId: planId },
+            });
+
+            // Step 2: Delete the plan itself
+            await tx.studyPlan.delete({
+                where: { id: planId },
+            });
+        });
+        
+        res.status(204).send(); // Success, no content
+    } catch (error) {
+        console.error("Error deleting study plan:", error);
+        res.status(500).json({ error: "Failed to delete study plan." });
+    }
+});
+
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
 });

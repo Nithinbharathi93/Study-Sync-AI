@@ -4,7 +4,6 @@ import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 
 function AllPlans() {
-  const [user, setUser] = useState(null);
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -16,7 +15,6 @@ function AllPlans() {
       if (!session) {
         navigate('/login');
       } else {
-        setUser(session.user);
         try {
           const plansResponse = await axios.get(`http://localhost:3001/study-plans/${session.user.id}`);
           setPlans(plansResponse.data);
@@ -29,6 +27,23 @@ function AllPlans() {
     };
     fetchUserAndPlans();
   }, [navigate]);
+
+  // --- NEW: Delete Handler ---
+  const handleDeletePlan = async (planId, e) => {
+    e.preventDefault(); // Prevent navigation when clicking the button
+    e.stopPropagation(); // Stop the event from bubbling up to the Link
+    
+    // Simple confirmation dialog
+    if (window.confirm('Are you sure you want to delete this plan and all its assessments? This action cannot be undone.')) {
+      try {
+        await axios.delete(`http://localhost:3001/study-plan/${planId}`);
+        // Remove the plan from the state to update the UI instantly
+        setPlans(plans.filter(p => p.id !== planId));
+      } catch (err) {
+        setError('Failed to delete the plan. Please try again.');
+      }
+    }
+  };
   
   if (loading) {
     return (
@@ -55,7 +70,8 @@ function AllPlans() {
         {plans.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {plans.map((plan) => (
-              <Link to={`/plan/${plan.id}`} key={plan.id} className="block bg-white/5 p-6 rounded-lg hover:bg-white/10 transition-all transform hover:-translate-y-1">
+              // The card itself is still a link to the details page
+              <Link to={`/plan/${plan.id}`} key={plan.id} className="relative group block bg-white/5 p-6 rounded-lg hover:bg-white/10 transition-colors">
                 <h3 className="text-xl font-semibold text-purple-300 truncate">{plan.title}</h3>
                 <p className="text-sm text-gray-400 mt-1 mb-3">
                   Created on: {new Date(plan.createdAt).toLocaleDateString()}
@@ -67,6 +83,14 @@ function AllPlans() {
                     </span>
                   ))}
                 </div>
+                {/* --- NEW: Delete Button --- */}
+                <button 
+                  onClick={(e) => handleDeletePlan(plan.id, e)}
+                  className="absolute top-4 right-4 text-gray-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                  title="Delete Plan"
+                >
+                  &#x1F5D1; {/* Trash Can Icon */}
+                </button>
               </Link>
             ))}
           </div>
