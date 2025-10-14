@@ -1,0 +1,87 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Add this to your schema.prisma file
+
+model Schedule {
+  id        String   @id @default(uuid())
+  date      DateTime @db.Date // Store only the date, not the time
+  createdAt DateTime @default(now())
+
+  profile   Profile  @relation(fields: [profileId], references: [id])
+  profileId String
+
+  tasks     Task[]
+
+  @@unique([profileId, date]) // A user can only have one schedule per day
+  @@map("schedules")
+}
+
+model Task {
+  id          String   @id @default(uuid())
+  title       String
+  isCompleted Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  schedule    Schedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  scheduleId  String
+
+  @@map("tasks")
+}
+
+model Assessment {
+  id        String   @id @default(uuid())
+  score     Int      // The score percentage, e.g., 80
+  createdAt DateTime @default(now())
+
+  // Relation to the user's profile
+  profile   Profile  @relation(fields: [profileId], references: [id])
+  profileId String
+
+  // Relation to the study plan
+  studyPlan   StudyPlan @relation(fields: [studyPlanId], references: [id])
+  studyPlanId String
+
+  @@map("assessments")
+}
+
+model StudyPlan {
+  id        String   @id @default(uuid())
+  title     String
+  topics    String[] // Array of topics the user provided
+  content   Json     // The JSON output from Gemini
+  createdAt DateTime @default(now())
+
+  // Relation to the user's profile
+  profile   Profile  @relation(fields: [profileId], references: [id])
+  profileId String
+  assessments Assessment[]
+
+  @@map("study_plans")
+}
+
+// Also, add the corresponding relation to your Profile model
+model Profile {
+  id        String   @id @default(uuid())
+  username  String?  @unique
+  email     String   @unique
+  createdAt DateTime @default(now())
+  studyPlans StudyPlan[]
+  assessments Assessment[]
+  schedules   Schedule[] 
+
+  @@map("profiles")
+}
