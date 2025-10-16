@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
+import image from '../assets/image.png';
 
 function Register() {
   const [formData, setFormData] = useState({ email: '', password: '', username: '' });
@@ -37,8 +38,13 @@ function Register() {
   return (
     <div className="min-h-screen w-full lg:grid lg:grid-cols-2">
       {/* Left Column: Branding and Welcome Message */}
-      <div className="relative hidden lg:flex flex-col items-center justify-center bg-gray-800 text-white p-12">
-        <div className="absolute inset-0 bg-gradient-to-br from-purple-600 to-blue-500 opacity-20"></div>
+      <div className="relative hidden lg:flex flex-col items-center justify-center text-white p-12">
+        <img 
+          src={image}
+          alt="Study Sync AI Background"
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-br from-purple-600/80 to-blue-500/80"></div>
         <div className="relative z-10 text-center">
             <h1 className="text-5xl font-bold tracking-tighter mb-4">
                 Study Sync AI
