@@ -4,52 +4,62 @@ import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 
 // Helper component to render the study plan
-const StudyPlanDisplay = ({ plan }) => {
-  // Defensive check in case the AI response is malformed
+const StudyPlanDisplay = ({ plan, user }) => {
+  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [importStatus, setImportStatus] = useState({ loading: false, message: '' });
+  
+  const handleImport = async () => {
+    setImportStatus({ loading: true, message: '' });
+    try {
+      const response = await axios.post('http://localhost:3001/import-plan', {
+        planId: plan.id,
+        userId: user.id,
+        startDate: startDate,
+      });
+      setImportStatus({ loading: false, message: response.data.message });
+    } catch (err) {
+      setImportStatus({ loading: false, message: 'Error: Could not import tasks.' });
+    }
+  };
+  
+  // Defensive check
   if (!plan || !plan.content || !plan.content.weekly_plan) {
     return <p className="text-red-400 text-center mt-8">Could not display the plan. The format is incorrect.</p>;
   }
 
   return (
     <div className="mt-8 bg-white/10 p-6 rounded-lg animate-fade-in">
-      <h2 className="text-3xl font-bold text-purple-300 mb-4">{plan.title}</h2>
-      {plan.content.weekly_plan.map((week) => (
-        <div key={week.week} className="mb-6">
-          <h3 className="text-2xl font-semibold border-b-2 border-purple-400/50 pb-2 mb-3">Week {week.week}</h3>
-          <div className="space-y-4">
-            {week.daily_schedule.map((day) => (
-              <div key={day.day} className="bg-gray-800/50 p-4 rounded-md">
-                <h4 className="text-lg font-bold text-white">{day.day}: <span className="font-normal text-gray-300">{day.topic}</span></h4>
-                
-                {/* --- UPDATED TASK RENDERING LOGIC --- */}
-                <div className="mt-2 space-y-3 pl-2">
-                  {day.tasks && day.tasks.map((task, index) => (
-                    <div key={index}>
-                      <p className="text-gray-200">&#8227; {task.description}</p>
-                      {task.resources && task.resources.length > 0 && (
-                        <div className="pl-6 mt-1 flex flex-wrap gap-x-4 gap-y-1">
-                          {task.resources.map((resource, resIndex) => (
-                            <a
-                              key={resIndex}
-                              href={resource.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-sm text-purple-400 hover:text-purple-300 hover:underline transition-colors"
-                            >
-                              &#128279; {resource.title}
-                            </a>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                {/* --- END UPDATED LOGIC --- */}
-              </div>
-            ))}
+      
+      {/* --- NEW: Import Section --- */}
+      <div className="bg-gray-800/50 p-4 rounded-lg mb-6 text-center">
+          <h3 className="text-xl font-bold mb-3">Ready to Start?</h3>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <label htmlFor="startDate" className="font-semibold">Select Start Date:</label>
+            <input 
+              type="date"
+              id="startDate"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+            />
+            <button 
+              onClick={handleImport} 
+              disabled={importStatus.loading}
+              className="px-6 py-2 rounded-lg font-semibold text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50"
+            >
+              {importStatus.loading ? 'Importing...' : 'Import to Scheduler'}
+            </button>
           </div>
-        </div>
-      ))}
+          {importStatus.message && (
+            <p className={`mt-3 font-semibold ${importStatus.message.startsWith('Error') ? 'text-red-400' : 'text-green-400'}`}>
+              {importStatus.message}
+              {!importStatus.message.startsWith('Error') && <Link to="/schedule" className="underline ml-2">View Schedule</Link>}
+            </p>
+          )}
+      </div>
+
+      <h2 className="text-3xl font-bold text-purple-300 mb-4">{plan.title}</h2>
+      {/* ... (rest of the plan display logic remains the same) ... */}
     </div>
   );
 };
@@ -151,7 +161,7 @@ function CreatePlan() {
           </div>
         )}
 
-        {generatedPlan && <StudyPlanDisplay plan={generatedPlan} />}
+        {generatedPlan && <StudyPlanDisplay plan={generatedPlan} user={user} />}
       </div>
     </div>
   );

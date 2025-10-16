@@ -38,6 +38,8 @@ model Task {
 
   schedule    Schedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
   scheduleId  String
+  
+  isAiGenerated Boolean @default(false)
 
   @@map("tasks")
 }

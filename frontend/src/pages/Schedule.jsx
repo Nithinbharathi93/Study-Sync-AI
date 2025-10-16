@@ -1,17 +1,16 @@
+// src/pages/Schedule.jsx
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 
 function Schedule() {
-  const [user, setUser] = useState(null);
   const [schedule, setSchedule] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  // Fetch user and schedule data
   useEffect(() => {
     const fetchUserAndSchedule = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -19,11 +18,10 @@ function Schedule() {
         navigate('/login');
         return;
       }
-      setUser(session.user);
       
       try {
         setLoading(true);
-        const date = new Date(selectedDate.setHours(0, 0, 0, 0)); // Normalize date to start of day
+        const date = new Date(selectedDate.setHours(0, 0, 0, 0));
         const response = await axios.post('http://localhost:3001/schedule', { userId: session.user.id, date: date.toISOString() });
         setSchedule(response.data);
       } catch (err) {
@@ -79,19 +77,22 @@ function Schedule() {
 
           {loading ? <p>Loading tasks...</p> : (
             <div>
-              {/* Task List */}
+              <div className="flex items-center gap-4 text-xs text-gray-400 mb-4">
+                  <span className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-purple-900/40 border border-purple-500"></div> AI-Generated Task</span>
+                  <span className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-gray-800/50 border border-gray-600"></div> Personal Task</span>
+              </div>
               <div className="space-y-3 mb-6">
                 {schedule && schedule.tasks.map(task => (
-                  <div key={task.id} className="flex items-center bg-gray-800/50 p-3 rounded-lg">
+                  <div key={task.id} className={`flex items-center p-3 rounded-lg ${task.isAiGenerated ? 'bg-purple-900/40 border border-purple-500/30' : 'bg-gray-800/50'}`}>
                     <input 
                       type="checkbox"
                       checked={task.isCompleted}
                       onChange={() => handleToggleTask(task.id, task.isCompleted)}
-                      className="h-6 w-6 rounded bg-gray-700 border-gray-600 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                      className="h-6 w-6 rounded bg-gray-700 border-gray-600 text-purple-600 focus:ring-purple-500 cursor-pointer flex-shrink-0"
                     />
                     <span className={`ml-4 flex-grow ${task.isCompleted ? 'line-through text-gray-500' : ''}`}>{task.title}</span>
-                    <button onClick={() => handleDeleteTask(task.id)} className="text-gray-500 hover:text-red-500 transition-colors">
-                      &#x1F5D1; {/* Trash Can Icon */}
+                    <button onClick={() => handleDeleteTask(task.id)} className="ml-4 text-gray-500 hover:text-red-500 transition-colors">
+                      &#x1F5D1;
                     </button>
                   </div>
                 ))}
@@ -99,14 +100,12 @@ function Schedule() {
                   <p className="text-center text-gray-400 py-4">No tasks for this day. Add one below!</p>
                 )}
               </div>
-
-              {/* Add Task Form */}
               <form onSubmit={handleAddTask} className="flex gap-2">
                 <input 
                   type="text"
                   value={newTaskTitle}
                   onChange={(e) => setNewTaskTitle(e.target.value)}
-                  placeholder="Add a new task..."
+                  placeholder="Add a new personal task..."
                   className="flex-grow w-full px-4 py-3 rounded-lg bg-gray-800 border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                 />
                 <button type="submit" className="px-6 py-3 rounded-lg font-semibold text-white bg-purple-600 hover:bg-purple-700">Add</button>

@@ -123,51 +123,56 @@ app.get('/profile/:id', async (req, res) => {
     res.status(500).json({ error: 'An internal server error occurred.' });
   }
 });
+// --- Zod Schema for Plan Creation ---
+const createPlanSchema = z.object({
+  topics: z.array(z.string()).min(1, "At least one topic is required."),
+  duration: z.string().min(3, "Duration is required."),
+  userId: z.string().uuid("Invalid user ID format."),
+});
 
-// --- NEW: Gemini AI and Study Plan Routes ---
-
-// 4. Create a new study plan
+// 4. Create a new study plan (Refactored and Hardened)
 app.post('/create-plan', async (req, res) => {
-  const { topics, duration, userId } = req.body;
-
-  if (!topics || !duration || !userId) {
-    return res.status(400).json({ error: "Topics, duration, and userId are required." });
-  }
-
-  const prompt = `
-    You are an expert study planner. Create a detailed study plan for a student who wants to learn the following topics: ${topics.join(", ")}.
-    The student has ${duration} to study.
-    Generate a structured study plan in a valid JSON format. Do not include any text or markdown formatting before or after the JSON object.
-    The JSON object must have a "title" and a "weekly_plan".
-    Each week in the "weekly_plan" array must contain a "week" number and a "daily_schedule".
-    Each "daily_schedule" array must contain objects with a "day", a "topic", and an array of "tasks".
-
-    --- NEW INSTRUCTION ---
-    For each task, also include a "resources" array containing one or two relevant, high-quality URLs (like documentation, tutorials, or videos) that would help a student complete that task. Each resource object in the array should have a "title" and a "url".
-
-    Example Task Structure:
-    "tasks": [
-      {
-        "description": "Read Chapter 1 on useState",
-        "resources": [
-          {
-            "title": "Official React Docs: useState",
-            "url": "https://react.dev/reference/react/useState"
-          }
-        ]
-      }
-    ]
-  `;
-
   try {
+    // 1. Validate request body with Zod
+    const { topics, duration, userId } = createPlanSchema.parse(req.body);
+
+    // 2. Verify that the user exists before making an AI call
+    const userExists = await prisma.profile.findUnique({ where: { id: userId } });
+    if (!userExists) {
+      return res.status(404).json({ error: "User profile not found. Cannot create a plan." });
+    }
+
+    // 3. Craft the prompt for Gemini
+    const prompt = `
+      You are an expert study planner. Create a detailed study plan for a student who wants to learn the following topics: ${topics.join(", ")}.
+      The student has ${duration} to study.
+      Generate a structured study plan in a valid JSON format. Do not include any text or markdown formatting before or after the JSON object.
+      The JSON object must have a "title" (string) and a "weekly_plan" (array).
+      Each week in "weekly_plan" must contain a "week" (number) and a "daily_schedule" (array).
+      Each object in "daily_schedule" must have a "day" (string), "topic" (string), and "tasks" (array).
+      Each task in "tasks" must have a "description" (string) and a "resources" (array of objects with "title" and "url" keys).
+    `;
+
+    // 4. Call the Gemini API
     const result = await model.generateContent(prompt);
     const response = result.response;
-    const jsonText = response.text();
-    
-    // Clean the response in case Gemini adds markdown backticks
-    const cleanedJsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
-    const planContent = JSON.parse(cleanedJsonText);
+    let planContent;
 
+    // 5. Safely parse the JSON response
+    try {
+      const jsonText = response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+      planContent = JSON.parse(jsonText);
+    } catch (parseError) {
+      console.error("JSON Parsing Error from Gemini:", parseError);
+      return res.status(502).json({ error: "Failed to parse the study plan from the AI. The response was not valid JSON." });
+    }
+
+    // 6. Validate the structure of the AI's JSON response
+    if (!planContent.title || !planContent.weekly_plan) {
+        return res.status(502).json({ error: "The AI response was missing required fields (title or weekly_plan)." });
+    }
+
+    // 7. Save the validated plan to the database
     const savedPlan = await prisma.studyPlan.create({
       data: {
         title: planContent.title,
@@ -180,8 +185,16 @@ app.post('/create-plan', async (req, res) => {
     res.status(201).json(savedPlan);
 
   } catch (error) {
+    // Handle Zod validation errors
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: "Invalid request body.", details: error.errors });
+    }
+    // Handle Prisma foreign key constraint errors as a fallback
+    if (error.code === 'P2003') {
+        return res.status(404).json({ error: "User profile not found. Cannot create a plan." });
+    }
     console.error("Error generating or saving study plan:", error);
-    res.status(500).json({ error: "Failed to create study plan. The AI model may be temporarily unavailable." });
+    res.status(500).json({ error: "An internal server error occurred while creating the plan." });
   }
 });
 
@@ -199,8 +212,6 @@ app.get('/study-plans/:userId', async (req, res) => {
         res.status(500).json({ error: "Failed to fetch study plans." });
     }
 });
-
-// Add this to your backend/index.js file with the other routes
 
 // 6. Get a single study plan by its ID
 app.get('/study-plan/:planId', async (req, res) => {
@@ -220,8 +231,6 @@ app.get('/study-plan/:planId', async (req, res) => {
         res.status(500).json({ error: "Failed to fetch study plan." });
     }
 });
-
-// Add these new routes to your backend/index.js file
 
 // 7. Generate an assessment for a study plan
 app.post('/generate-assessment', async (req, res) => {
@@ -274,10 +283,6 @@ app.post('/submit-assessment', async (req, res) => {
         res.status(500).json({ error: "Failed to save assessment." });
     }
 });
-
-// Add these new routes to your backend/index.js file
-
-// --- NEW: Schedule & Task Management Routes ---
 
 // 9. Get or create a schedule for a specific date
 app.post('/schedule', async (req, res) => {
@@ -349,10 +354,6 @@ app.delete('/tasks/:taskId', async (req, res) => {
     }
 });
 
-// Add this new route to your backend/index.js file
-
-// --- NEW: Performance Data Route ---
-
 // 13. Get all performance data for a user
 app.get('/performance/:userId', async (req, res) => {
     const { userId } = req.params;
@@ -379,10 +380,6 @@ app.get('/performance/:userId', async (req, res) => {
     }
 });
 
-// Add this new route to your backend/index.js file
-
-// --- NEW: Delete a Study Plan ---
-
 // 14. Delete a study plan and its related assessments
 app.delete('/study-plan/:planId', async (req, res) => {
     const { planId } = req.params;
@@ -404,6 +401,60 @@ app.delete('/study-plan/:planId', async (req, res) => {
     } catch (error) {
         console.error("Error deleting study plan:", error);
         res.status(500).json({ error: "Failed to delete study plan." });
+    }
+});
+
+// 15. Import tasks from a study plan into the user's schedule
+app.post('/import-plan', async (req, res) => {
+    const { planId, userId, startDate } = req.body;
+    if (!planId || !userId || !startDate) {
+        return res.status(400).json({ error: 'planId, userId, and startDate are required.' });
+    }
+
+    try {
+        const plan = await prisma.studyPlan.findUnique({ where: { id: planId } });
+        if (!plan) return res.status(404).json({ error: 'Study plan not found.' });
+
+        const planContent = plan.content;
+        const tasksToCreate = [];
+        let currentDate = new Date(startDate);
+
+        // Iterate through the AI-generated plan's weeks and days
+        for (const week of planContent.weekly_plan) {
+            for (const day of week.daily_schedule) {
+                // Find or create a schedule for the calculated date
+                const schedule = await prisma.schedule.upsert({
+                    where: { profileId_date: { profileId: userId, date: currentDate } },
+                    update: {},
+                    create: { profileId: userId, date: currentDate },
+                });
+
+                // Prepare tasks for this day to be created
+                for (const task of day.tasks) {
+                    tasksToCreate.push({
+                        title: task.description, // Use the AI description as the task title
+                        scheduleId: schedule.id,
+                        isAiGenerated: true, // Mark this task as from the AI
+                    });
+                }
+                
+                // Move to the next day for the next iteration
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+        }
+
+        // Create all the tasks in a single, efficient database transaction
+        if (tasksToCreate.length > 0) {
+            await prisma.task.createMany({
+                data: tasksToCreate,
+            });
+        }
+
+        res.status(200).json({ message: `${tasksToCreate.length} tasks imported successfully!` });
+
+    } catch (error) {
+        console.error("Error importing plan:", error);
+        res.status(500).json({ error: "Failed to import plan." });
     }
 });
 
